@@ -6,6 +6,7 @@ import Html.Attributes
 import Html.Events
 import Json.Decode
 import Mouse
+import ImageSearch
 
 
 borderColor =
@@ -21,6 +22,7 @@ type alias Model =
             { startPosition : Mouse.Position
             , path : FramePath
             }
+    , imageSearch : ImageSearch.Model
     }
 
 
@@ -83,6 +85,7 @@ initialModel =
                     }
             }
     , dragState = Nothing
+    , imageSearch = ImageSearch.init
     }
 
 
@@ -90,6 +93,7 @@ type Msg
     = DragStart FramePath Mouse.Position
     | DragMove Mouse.Position
     | DragEnd Mouse.Position
+    | ImageSearchMsg ImageSearch.Msg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -132,6 +136,34 @@ update msg model =
             ( { model | dragState = Nothing }
             , Cmd.none
             )
+
+        ImageSearchMsg (ImageSearch.ImageSelected { url }) ->
+            ( { model
+                | frame = replaceImage [ 0 ] url model.frame
+              }
+            , Cmd.none
+            )
+
+        ImageSearchMsg childMsg ->
+            let
+                ( newChildModel, childCmd ) =
+                    ImageSearch.update childMsg model.imageSearch
+            in
+                ( { model | imageSearch = newChildModel }
+                , Cmd.map ImageSearchMsg childCmd
+                )
+
+
+replaceImage : FramePath -> String -> Frame -> Frame
+replaceImage path newUrl frame =
+    case frame of
+        SingleImage currentImage ->
+            SingleImage { currentImage | url = newUrl }
+
+        HorizontalSplit current ->
+            -- TODO follow the correct path
+            HorizontalSplit
+                { current | top = replaceImage [] newUrl current.top }
 
 
 applyDrag : FramePath -> Position -> Frame -> Frame
@@ -259,6 +291,16 @@ view model =
         [ Html.Attributes.style [ ( "padding", "8px" ) ]
         ]
         [ viewCanvas model.borderSize model.canvas model.frame
+        , Html.div
+            [ Html.Attributes.style
+                [ ( "position", "absolute" )
+                , ( "right", "0px" )
+                , ( "top", "0px" )
+                ]
+            ]
+            [ Html.App.map ImageSearchMsg
+                (ImageSearch.view model.imageSearch)
+            ]
         , Html.hr [] []
         , Html.text <| toString model
         ]

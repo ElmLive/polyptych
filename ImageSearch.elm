@@ -1,4 +1,4 @@
-module ImageSearch exposing (view)
+module ImageSearch exposing (Model, init, Msg(..), update, view)
 
 import Html.App
 import Html
@@ -14,8 +14,8 @@ type alias Model =
     }
 
 
-initialModel : Model
-initialModel =
+init : Model
+init =
     { results = [] }
 
 
@@ -23,6 +23,7 @@ type Msg
     = DoSearch
     | SearchFailure Http.Error
     | SearchSuccess PixabaySearchResponse
+    | ImageSelected { url : String }
 
 
 type alias PixabaySearchResponse =
@@ -65,7 +66,10 @@ update msg model =
             , Cmd.none
             )
 
-        _ ->
+        SearchFailure _ ->
+            ( model, Cmd.none )
+
+        ImageSelected _ ->
             ( model, Cmd.none )
 
 
@@ -89,6 +93,7 @@ viewImage image =
                 , ( "max-height", "100px" )
                 ]
             , Html.Attributes.src image.preview
+            , Html.Events.onClick (ImageSelected { url = image.webFormat })
             ]
             []
         ]
@@ -96,7 +101,7 @@ viewImage image =
 
 main =
     Html.App.program
-        { init = ( initialModel, Cmd.none )
+        { init = ( init, Cmd.none )
         , subscriptions = \_ -> Sub.none
         , update = update
         , view = view
