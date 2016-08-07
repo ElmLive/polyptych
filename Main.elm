@@ -5,8 +5,13 @@ import Html
 import Html.Attributes
 
 
+borderColor =
+    "tan"
+
+
 type alias Model =
     { canvas : Size
+    , borderSize : Int
     , frame : Frame
     }
 
@@ -27,6 +32,7 @@ type Frame
 initialModel : Model
 initialModel =
     { canvas = { width = 250, height = 250 }
+    , borderSize = 5
     , frame =
         HorizontalSplit
             { top = SingleImage { url = "https://i.imgur.com/gt5lnkS.jpg" }
@@ -45,8 +51,8 @@ update msg model =
     ( model, Cmd.none )
 
 
-viewCanvas : Size -> Frame -> Html.Html Msg
-viewCanvas size rootFrame =
+viewCanvas : Int -> Size -> Frame -> Html.Html Msg
+viewCanvas borderSize size rootFrame =
     Html.div
         [ Html.Attributes.style
             [ ( "width", toString size.width ++ "px" )
@@ -54,12 +60,22 @@ viewCanvas size rootFrame =
             , ( "border", "2px solid black" )
             ]
         ]
-        [ viewFrame size rootFrame
+        [ Html.div
+            [ Html.Attributes.style
+                [ ( "border", toString borderSize ++ "px solid " ++ borderColor )
+                ]
+            ]
+            [ viewFrame borderSize
+                { width = size.width - 2 * borderSize
+                , height = size.height - 2 * borderSize
+                }
+                rootFrame
+            ]
         ]
 
 
-viewFrame : Size -> Frame -> Html.Html Msg
-viewFrame size frame =
+viewFrame : Int -> Size -> Frame -> Html.Html Msg
+viewFrame borderSize size frame =
     case frame of
         SingleImage { url } ->
             Html.div
@@ -74,12 +90,20 @@ viewFrame size frame =
 
         HorizontalSplit { top, topHeight, bottom } ->
             Html.div []
-                [ viewFrame
+                [ viewFrame borderSize
                     { width = size.width
                     , height = topHeight
                     }
                     top
-                , viewFrame
+                , Html.div
+                    [ Html.Attributes.style
+                        [ ( "width", toString size.width ++ "px" )
+                        , ( "height", toString borderSize ++ "px" )
+                        , ( "background-color", borderColor )
+                        ]
+                    ]
+                    []
+                , viewFrame borderSize
                     { width = size.width
                     , height = size.height - topHeight
                     }
@@ -92,7 +116,7 @@ view model =
     Html.div
         [ Html.Attributes.style [ ( "padding", "8px" ) ]
         ]
-        [ viewCanvas model.canvas model.frame
+        [ viewCanvas model.borderSize model.canvas model.frame
         , Html.hr [] []
         , Html.text <| toString model
         ]
