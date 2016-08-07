@@ -16,7 +16,11 @@ type alias Model =
     { canvas : Size
     , borderSize : Int
     , frame : Frame
-    , dragState : Maybe Mouse.Position
+    , dragState :
+        Maybe
+            { startPosition : Mouse.Position
+            , path : FramePath
+            }
     }
 
 
@@ -24,9 +28,14 @@ type alias Size =
     { width : Int, height : Int }
 
 
+type alias Position =
+    { x : Int, y : Int }
+
+
 type alias Image =
     { url : String
     , size : Size
+    , offset : Position
     }
 
 
@@ -39,6 +48,10 @@ type Frame
         }
 
 
+type alias FramePath =
+    List Int
+
+
 initialModel : Model
 initialModel =
     { canvas = { width = 250, height = 250 }
@@ -49,12 +62,24 @@ initialModel =
                 SingleImage
                     { url = "https://i.imgur.com/gt5lnkS.jpg"
                     , size = { width = 960, height = 637 }
+                    , offset = { x = 0, y = 0 }
                     }
             , topHeight = 80
             , bottom =
-                SingleImage
-                    { url = "http://imgur.com/4mYf6Jh.jpg"
-                    , size = { width = 960, height = 618 }
+                HorizontalSplit
+                    { top =
+                        SingleImage
+                            { url = "http://imgur.com/4mYf6Jh.jpg"
+                            , size = { width = 960, height = 618 }
+                            , offset = { x = 0, y = 0 }
+                            }
+                    , topHeight = 100
+                    , bottom =
+                        SingleImage
+                            { url = "http://imgur.com/Pz945w3.jpg"
+                            , size = { width = 960, height = 720 }
+                            , offset = { x = 0, y = 0 }
+                            }
                     }
             }
     , dragState = Nothing
@@ -62,7 +87,7 @@ initialModel =
 
 
 type Msg
-    = DragDividerStart Mouse.Position
+    = DragStart FramePath Mouse.Position
     | DragMove Mouse.Position
     | DragEnd Mouse.Position
 
@@ -70,20 +95,32 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case Debug.log "msg" msg of
-        DragDividerStart position ->
-            ( { model | dragState = Just position }
+        DragStart path position ->
+            ( { model
+                | dragState =
+                    Just
+                        { path = List.reverse path
+                        , startPosition = position
+                        }
+              }
             , Cmd.none
             )
 
         DragMove currentPosition ->
             case model.dragState of
-                Just startPosition ->
+                Just { startPosition, path } ->
                     ( { model
                         | frame =
-                            applyDrag
-                                (currentPosition.y - startPosition.y)
+                            applyDrag path
+                                { x = startPosition.x - currentPosition.x
+                                , y = startPosition.y - currentPosition.y
+                                }
                                 model.frame
-                        , dragState = Just currentPosition
+                        , dragState =
+                            Just
+                                { path = path
+                                , startPosition = currentPosition
+                                }
                       }
                     , Cmd.none
                     )
@@ -97,18 +134,40 @@ update msg model =
             )
 
 
-applyDrag : Int -> Frame -> Frame
-applyDrag yChange frame =
+applyDrag : FramePath -> Position -> Frame -> Frame
+applyDrag path change frame =
     case frame of
         HorizontalSplit { top, topHeight, bottom } ->
-            HorizontalSplit
-                { top = top
-                , bottom = bottom
-                , topHeight = topHeight + yChange
-                }
+            case path of
+                0 :: rest ->
+                    HorizontalSplit
+                        { top = applyDrag rest change top
+                        , topHeight = topHeight
+                        , bottom = bottom
+                        }
 
-        SingleImage _ ->
-            frame
+                1 :: rest ->
+                    HorizontalSplit
+                        { top = top
+                        , topHeight = topHeight
+                        , bottom = applyDrag rest change bottom
+                        }
+
+                _ ->
+                    HorizontalSplit
+                        { top = top
+                        , bottom = bottom
+                        , topHeight = topHeight - change.y
+                        }
+
+        SingleImage image ->
+            SingleImage
+                { image
+                    | offset =
+                        { x = image.offset.x + change.x
+                        , y = image.offset.y + change.y
+                        }
+                }
 
 
 viewCanvas : Int -> Size -> Frame -> Html.Html Msg
@@ -125,7 +184,8 @@ viewCanvas borderSize size rootFrame =
                 [ ( "border", toString borderSize ++ "px solid " ++ borderColor )
                 ]
             ]
-            [ viewFrame borderSize
+            [ viewFrame []
+                borderSize
                 { width = size.width - 2 * borderSize
                 , height = size.height - 2 * borderSize
                 }
@@ -134,8 +194,8 @@ viewCanvas borderSize size rootFrame =
         ]
 
 
-viewFrame : Int -> Size -> Frame -> Html.Html Msg
-viewFrame borderSize size frame =
+viewFrame : FramePath -> Int -> Size -> Frame -> Html.Html Msg
+viewFrame path borderSize size frame =
     case frame of
         SingleImage image ->
             let
@@ -156,13 +216,19 @@ viewFrame borderSize size frame =
                             else
                                 toString size.width ++ "px auto"
                           )
+                        , ( "background-position"
+                          , toString -image.offset.x ++ "px " ++ toString -image.offset.y ++ "px"
+                          )
                         ]
+                    , Html.Events.on "mousedown"
+                        (Json.Decode.map (DragStart path) Mouse.position)
                     ]
                     []
 
         HorizontalSplit { top, topHeight, bottom } ->
             Html.div []
-                [ viewFrame borderSize
+                [ viewFrame (0 :: path)
+                    borderSize
                     { width = size.width
                     , height = topHeight
                     }
@@ -175,10 +241,11 @@ viewFrame borderSize size frame =
                         , ( "cursor", "ns-resize" )
                         ]
                     , Html.Events.on "mousedown"
-                        (Json.Decode.map DragDividerStart Mouse.position)
+                        (Json.Decode.map (DragStart path) Mouse.position)
                     ]
                     []
-                , viewFrame borderSize
+                , viewFrame (1 :: path)
+                    borderSize
                     { width = size.width
                     , height = size.height - topHeight - borderSize
                     }
@@ -199,14 +266,14 @@ view model =
 
 subscriptions model =
     case model.dragState of
-        Nothing ->
-            Sub.none
-
         Just _ ->
             Sub.batch
                 [ Mouse.moves DragMove
                 , Mouse.ups DragEnd
                 ]
+
+        _ ->
+            Sub.none
 
 
 main =
