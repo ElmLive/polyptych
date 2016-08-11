@@ -22,7 +22,7 @@ type alias Model =
             { startPosition : Mouse.Position
             , path : FramePath
             }
-    , imageSearch : ImageSearch.Model
+    , imageSearch : ImageSearch.State
     }
 
 
@@ -137,19 +137,22 @@ update msg model =
             , Cmd.none
             )
 
-        ImageSearchMsg (ImageSearch.ImageSelected { url }) ->
-            ( { model
-                | frame = replaceImage [ 0 ] url model.frame
-              }
-            , Cmd.none
-            )
-
         ImageSearchMsg childMsg ->
             let
-                ( newChildModel, childCmd ) =
+                ( newChildState, childCmd, selectedImage ) =
                     ImageSearch.update childMsg model.imageSearch
+
+                newModel =
+                    case selectedImage of
+                        Just newImage ->
+                            { model
+                                | frame = replaceImage [ 0 ] newImage.url model.frame
+                            }
+
+                        Nothing ->
+                            model
             in
-                ( { model | imageSearch = newChildModel }
+                ( { newModel | imageSearch = newChildState }
                 , Cmd.map ImageSearchMsg childCmd
                 )
 

@@ -1,4 +1,4 @@
-module ImageSearch exposing (Model, init, Msg(..), update, view)
+module ImageSearch exposing (State, init, Msg, update, view)
 
 import Html.App
 import Html
@@ -9,21 +9,26 @@ import Http
 import Task
 
 
-type alias Model =
-    { results : List PixabayImage
-    }
+type State
+    = State
+        { results : List PixabayImage
+        }
 
 
-init : Model
+init : State
 init =
-    { results = [] }
+    State { results = [] }
 
 
 type Msg
     = DoSearch
     | SearchFailure Http.Error
     | SearchSuccess PixabaySearchResponse
-    | ImageSelected { url : String }
+    | ImageSelected Image
+
+
+type alias Image =
+    { url : String }
 
 
 type alias PixabaySearchResponse =
@@ -52,35 +57,37 @@ pixabayImageDecoder =
         (Json.Decode.at [ "webformatURL" ] Json.Decode.string)
 
 
-update : Msg -> Model -> ( Model, Cmd Msg )
-update msg model =
-    case Debug.log "msg" msg of
+update : Msg -> State -> ( State, Cmd Msg, Maybe Image )
+update msg (State state) =
+    case msg of
         DoSearch ->
-            ( model
+            ( State state
             , Http.get pixabaySearchResponseDecoder "https://pixabay.com/api/?key=3055468-47029136a9b3612c0dbc36058&q=yellow+flowers&image_type=photo&pretty=true"
                 |> Task.perform SearchFailure SearchSuccess
+            , Nothing
             )
 
         SearchSuccess data ->
-            ( { model | results = data.hits }
+            ( State { state | results = data.hits }
             , Cmd.none
+            , Nothing
             )
 
         SearchFailure _ ->
-            ( model, Cmd.none )
+            ( State state, Cmd.none, Nothing )
 
-        ImageSelected _ ->
-            ( model, Cmd.none )
+        ImageSelected image ->
+            ( State state, Cmd.none, Just image )
 
 
-view : Model -> Html.Html Msg
-view model =
+view : State -> Html.Html Msg
+view (State state) =
     Html.div []
         [ Html.button
             [ Html.Events.onClick DoSearch
             ]
             [ Html.text "Search" ]
-        , Html.ul [] (List.map viewImage model.results)
+        , Html.ul [] (List.map viewImage state.results)
         ]
 
 
@@ -103,6 +110,15 @@ main =
     Html.App.program
         { init = ( init, Cmd.none )
         , subscriptions = \_ -> Sub.none
-        , update = update
+        , update =
+            \msg oldModel ->
+                let
+                    ( newModel, cmd, selectedImage ) =
+                        update msg oldModel
+
+                    _ =
+                        Debug.log "selectedImage" selectedImage
+                in
+                    ( newModel, cmd )
         , view = view
         }
