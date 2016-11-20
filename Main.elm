@@ -1,6 +1,5 @@
 module Main exposing (..)
 
-import Html.App
 import Html
 import Html.Attributes
 import Html.Events
@@ -9,6 +8,7 @@ import Mouse
 import ImageSearch
 
 
+borderColor : String
 borderColor =
     "tan"
 
@@ -301,7 +301,7 @@ view model =
                 , ( "top", "0px" )
                 ]
             ]
-            [ Html.App.map ImageSearchMsg
+            [ Html.map ImageSearchMsg
                 (ImageSearch.view model.imageSearch)
             ]
         , Html.hr [] []
@@ -309,6 +309,7 @@ view model =
         ]
 
 
+subscriptions : Model -> Sub Msg
 subscriptions model =
     case model.dragState of
         Just _ ->
@@ -321,8 +322,9 @@ subscriptions model =
             Sub.none
 
 
+main : Program Never Model Msg
 main =
-    Html.App.program
+    Html.program
         { init = ( initialModel, Cmd.none )
         , subscriptions = subscriptions
         , update = update
